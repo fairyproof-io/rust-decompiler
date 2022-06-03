@@ -1,30 +1,33 @@
 use crate::opcodes::OpCode;
+use hex::FromHexError;
+use num_enum::{TryFromPrimitive, TryFromPrimitiveError};
 use std::error;
 use std::fmt::{Display, Formatter};
-use hex::FromHexError;
 
 #[derive(Debug, PartialEq)]
 pub enum ASMError {
     IncompletePushInstruction(u64),
     HexDecodeError(FromHexError),
+    OpCodeNotExist(TryFromPrimitiveError<OpCode>),
 }
 
 impl Display for ASMError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match *self {
+        match self {
             Self::IncompletePushInstruction(pc) => {
                 write!(f, "incomplete push instruction at {}", pc)
-            },
+            }
             Self::HexDecodeError(err) => {
                 write!(f, "{}", err.to_string())
-            },
+            }
+            Self::OpCodeNotExist(err) => {
+                write!(f, "opcode {} does not exist", err.number)
+            }
         }
     }
 }
 
-impl error::Error for ASMError {
-
-}
+impl error::Error for ASMError {}
 
 impl From<FromHexError> for ASMError {
     fn from(err: FromHexError) -> Self {
@@ -32,36 +35,41 @@ impl From<FromHexError> for ASMError {
     }
 }
 
+impl From<TryFromPrimitiveError<OpCode>> for ASMError {
+    fn from(err: TryFromPrimitiveError<OpCode>) -> Self {
+        Self::OpCodeNotExist(err)
+    }
+}
 
 // Iterator for disassembled EVM instructions
 struct InstructionIterator<'a> {
-    code: &'a[u8],
+    code: &'a [u8],
     pc: u64,
-    arg: &'a[u8],
+    arg: &'a [u8],
     op: OpCode,
     error: Option<ASMError>,
     started: bool,
 }
 
-impl <'a>InstructionIterator<'a> {
+impl<'a> InstructionIterator<'a> {
     fn new(code: &'a [u8]) -> Self {
-        Self{
+        Self {
             code,
             pc: 0,
             arg: "".as_bytes(),
             op: OpCode::STOP,
             error: None,
-            started: false
+            started: false,
         }
     }
 }
 
-impl <'a> Iterator for InstructionIterator<'a> {
+impl<'a> Iterator for InstructionIterator<'a> {
     type Item = (u64, OpCode, &'a [u8]);
 
-    // next returns true if there is a next instruction and moves on.
+    // next returns item if there is a next instruction and moves on.
     fn next(&mut self) -> Option<Self::Item> {
-        if self.error != None || self.code.len() as u64 <=  self.pc {
+        if self.code.len() as u64 <= self.pc {
             // We previously reached an error or the end.
             return None;
         }
@@ -81,13 +89,20 @@ impl <'a> Iterator for InstructionIterator<'a> {
             // We reached the end.
             return None;
         }
-        // todo: catch to a convert error
-        self.op = self.code[self.pc as usize].try_into().unwrap();
+        match OpCode::try_from_primitive(self.code[self.pc as usize]) {
+            Ok(op) => self.op = op,
+            Err(e) => {
+                self.error = Some(ASMError::OpCodeNotExist(e));
+                //println!("{:?}", self.error.as_ref().unwrap().to_string());
+                return None;
+            }
+        }
         if self.op.is_push() {
             let a = self.op as u64 - OpCode::PUSH1 as u64 + 1;
             let u = self.pc + 1 + a;
             if self.code.len() as u64 <= self.pc || (self.code.len() as u64) < u {
-                self.error = Option::from(ASMError::IncompletePushInstruction(self.pc));
+                self.error = Some(ASMError::IncompletePushInstruction(self.pc));
+                //println!("{:?}", self.error.as_ref().unwrap().to_string());
                 return None;
             }
             self.arg = &self.code[(self.pc + 1) as usize..u as usize];
@@ -98,25 +113,25 @@ impl <'a> Iterator for InstructionIterator<'a> {
     }
 }
 
-
-
 // print_disassembled pretty-print all disassembled EVM instructions to stdout.
-pub fn print_disassembled(code: String) -> Result<(), ASMError>{
-    let byte_code = hex::decode(code)?;
-    let byte_code= byte_code.as_slice();
-    let it = InstructionIterator::new(byte_code);
-    for (pc, op, arg) in it {
+pub fn print_disassembled(code: String) -> Result<(), ASMError> {
+    let bytecode = hex::decode(code)?;
+    let mut it = InstructionIterator::new(bytecode.as_slice());
+    for (pc, op, arg) in it.by_ref() {
         if arg.len() != 0 && 0 < arg.len() {
-            println!("{}:{} {}", pc, op, hex::encode(arg));
+            println!("{:#08x}:  {} 0x{}", pc, op, hex::encode(arg));
         } else {
-            println!("{}:{}", pc, op);
-
+            println!("{:#08x}:  {}", pc, op);
         }
+    }
+
+    if let Some(err) = it.error {
+        return Err(err);
     }
     Ok(())
 }
 
 // disassemble returns all disassembled EVM instructions in human-readable format.
 //pub fn disassemble(script: &[u8]) -> Result<String, ASMError> {
-  //  Ok("".to_string())
+//  Ok("".to_string())
 //}
