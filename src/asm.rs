@@ -125,10 +125,7 @@ pub fn print_disassembled(code: String) -> Result<(), ASMError> {
         }
     }
 
-    if let Some(err) = it.error {
-        return Err(err);
-    }
-    Ok(())
+    it.error.map_or(Ok(()), |err| Err(err))
 }
 
 // disassemble returns all disassembled EVM instructions in human-readable format.
