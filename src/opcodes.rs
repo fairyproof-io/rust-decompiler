@@ -327,44 +327,11 @@ lazy_static!(
 
 
 impl OpCode {
-    // IsPush specifies if an opcode is a PUSH opcode.
-    pub fn is_push(self) -> bool {
-        match self {
-            Self::PUSH1
-            | Self::PUSH2
-            | Self::PUSH3
-            | Self::PUSH4
-            | Self::PUSH5
-            | Self::PUSH6
-            | Self::PUSH7
-            | Self::PUSH8
-            | Self::PUSH9
-            | Self::PUSH10
-            | Self::PUSH11
-            | Self::PUSH12
-            | Self::PUSH13
-            | Self::PUSH14
-            | Self::PUSH15
-            | Self::PUSH16
-            | Self::PUSH17
-            | Self::PUSH18
-            | Self::PUSH19
-            | Self::PUSH20
-            | Self::PUSH21
-            | Self::PUSH22
-            | Self::PUSH23
-            | Self::PUSH24
-            | Self::PUSH25
-            | Self::PUSH26
-            | Self::PUSH27
-            | Self::PUSH28
-            | Self::PUSH29
-            | Self::PUSH30
-            | Self::PUSH31
-            | Self::PUSH32 => true,
-            _ => false,
-        }
+    /// Returns true if given instruction is `PUSHN` instruction.
+    pub fn is_push(&self) -> bool {
+        *self >= Self::PUSH1 && *self <= Self::PUSH32
     }
+
 }
 
 impl Clone for OpCode {
